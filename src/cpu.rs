@@ -1,4 +1,9 @@
+use display::Display;
 use memory::Memory;
+use keyboard::Keyboard;
+use rand;
+use rand::Rng;
+use std::num::Wrapping;
 
 type Opcode = u16;
 
@@ -29,6 +34,8 @@ impl Registers {
 pub struct Cpu<M: Memory> {
     registers: Registers,
     memory: M,
+    display: Display,
+    keyboard: Keyboard,
 }
 
 impl<M: Memory> Cpu<M> {
@@ -36,11 +43,23 @@ impl<M: Memory> Cpu<M> {
         Cpu {
             registers: Registers::new(),
             memory: memory,
+            display: Display::new(),
+            keyboard: Keyboard::new(),
         }
     }
 
     pub fn cycle(&mut self) {
         let opcode = self.fetch_opcode();
+        self.execute_opcode(opcode);
+    }
+
+    pub fn decrement_timers(&mut self) {
+        if self.registers.delay_timer > 0 {
+            self.registers.delay_timer -= 1;
+        }
+        if self.registers.sound_timer > 0 {
+            self.registers.sound_timer -= 1;
+        }
     }
 
     fn fetch_opcode(&self) -> Opcode {
@@ -51,6 +70,7 @@ impl<M: Memory> Cpu<M> {
     }
 
     fn execute_opcode(&mut self, opcode: Opcode) {
+        //println!("Executing opcode: {}", opcode);
         match opcode {
             0x00e0 => self.cls(),
             0x00ee => self.ret(),
@@ -86,111 +106,318 @@ impl<M: Memory> Cpu<M> {
             0xF033...0xFF33 if opcode % 0xFF == 0x33 => self.ld_bcd(opcode),
             0xF055...0xFF55 if opcode % 0xFF == 0x55 => self.ld_i_vx(opcode),
             0xF065...0xFF65 if opcode % 0xFF == 0x65 => self.ld_vx_i(opcode),
-            _ => (),
+            _ => panic!("Opcode unknown"),
         }
     }
 
     fn cls(&mut self) {
         // clear screen
+        self.display.clear();
+        self.registers.pc += 2;
     }
 
     fn ret(&mut self) {
-        // return from subroutine call
+        // Return from a subroutine
+        self.registers.sp -= 1;
+        self.registers.pc = self.registers.stack[self.registers.sp as usize];
     }
 
     fn jp(&mut self, opcode: Opcode) {
-    }
-
-    fn call(&mut self, opcode: Opcode) {
-    }
-
-    fn se_rc(&mut self, opcode: Opcode) {
-    }
-
-    fn sne_rc(&mut self, opcode: Opcode) {
-    }
-
-    fn se_rr(&mut self, opcode: Opcode) {
-    }
-
-    fn ld_rc(&mut self, opcode: Opcode) {
-    }
-
-    fn add_rc(&mut self, opcode: Opcode) {
-    }
-
-    fn ld_rr(&mut self, opcode: Opcode) {
-    }
-
-    fn or(&mut self, opcode: Opcode) {
-    }
-
-    fn and(&mut self, opcode: Opcode) {
-    }
-
-    fn xor(&mut self, opcode: Opcode) {
-    }
-
-    fn add_rr(&mut self, opcode: Opcode) {
-    }
-
-    fn sub(&mut self, opcode: Opcode) {
-    }
-
-    fn shr(&mut self, opcode: Opcode) {
-    }
-
-    fn subn(&mut self, opcode: Opcode) {
-    }
-
-    fn shl(&mut self, opcode: Opcode) {
-    }
-
-    fn sne_rr(&mut self, opcode: Opcode) {
-    }
-
-    fn ld_addr(&mut self, opcode: Opcode) {
+        // Jump to location at nnn
+        self.registers.pc = Self::get_address(opcode);
     }
 
     fn jp2(&mut self, opcode: Opcode) {
+        // Jump to location nnn + V0
+        let v0 = self.registers.v[0] as u16;
+        self.registers.pc = v0 + Self::get_address(opcode);
     }
 
-    fn rnd(&mut self, opcode: Opcode) {
+    fn call(&mut self, opcode: Opcode) {
+        // Call subroutine at nnn
+        self.registers.stack[self.registers.sp as usize] = self.registers.pc;
+        self.registers.sp += 1;
+        self.registers.pc = Self::get_address(opcode);
     }
 
-    fn drw(&mut self, opcode: Opcode) {
+    fn se_rc(&mut self, opcode: Opcode) {
+        // Skip next instruction if Vx == kk
+        let reg = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        let byte = Self::get_low_byte(opcode);
+        if reg == byte {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
     }
 
-    fn skp(&mut self, opcode: Opcode) {
+    fn sne_rc(&mut self, opcode: Opcode) {
+        // Skip next instruction if Vx != kk
+        let reg = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        let byte = Self::get_low_byte(opcode);
+        if reg != byte {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
     }
 
-    fn sknp(&mut self, opcode: Opcode) {
+    fn sne_rr(&mut self, opcode: Opcode) {
+        // Skip next instruction if Vx != Vy
+        let i1 = Self::get_index_from_nibble(opcode, 3);
+        let i2 = Self::get_index_from_nibble(opcode, 2);
+        if self.registers.v[i1] != self.registers.v[i2] {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
+    }
+
+    fn se_rr(&mut self, opcode: Opcode) {
+        // Skip next instruction if Vx == Vy
+        let reg1 = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
+        if reg1 == reg2 {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
+    }
+
+    fn ld_rc(&mut self, opcode: Opcode) {
+        // Set Vx == kk
+        let byte = Self::get_low_byte(opcode);
+        self.registers.v[Self::get_index_from_nibble(opcode, 3)] = byte;
+        self.registers.pc += 2;
+    }
+
+    fn ld_rr(&mut self, opcode: Opcode) {
+        // Set Vx = Vy
+        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
+        let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        *reg1 = reg2;
+        self.registers.pc += 2;
+    }
+
+    fn ld_addr(&mut self, opcode: Opcode) {
+        // Set I = nnn
+        self.registers.i = Self::get_address(opcode);
+        self.registers.pc += 2;
     }
 
     fn ld_vx_dt(&mut self, opcode: Opcode) {
+        // Set Vx = delay timer value
+        let i = Self::get_index_from_nibble(opcode, 3);
+        self.registers.v[i] = self.registers.delay_timer;
+        self.registers.pc += 2;
     }
 
     fn ld_k(&mut self, opcode: Opcode) {
+        // Wait for a key press, store the value of the key in Vx.
+        if let Some(key) = self.keyboard.any_key_pressed() {
+            let i = Self::get_index_from_nibble(opcode, 3);
+            self.registers.v[i] = key;
+            self.registers.pc += 2;
+        }
     }
 
     fn ld_dt_vx(&mut self, opcode: Opcode) {
+        // Set delay timer = Vx
+        let i = Self::get_index_from_nibble(opcode, 3);
+        self.registers.delay_timer = self.registers.v[i];
+        self.registers.pc += 2;
     }
 
     fn ld_st_vx(&mut self, opcode: Opcode) {
-    }
-
-    fn add_i_vx(&mut self, opcode: Opcode) {
+        // Set sound timer = Vx
+        let i = Self::get_index_from_nibble(opcode, 3);
+        self.registers.sound_timer = self.registers.v[i];
+        self.registers.pc += 2;
     }
 
     fn ld_sprite(&mut self, opcode: Opcode) {
+        // Set I = location of sprite for digit Vx
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let val = self.registers.v[i] % 0x10;
+        // The digit sprites are stored from memory location 0x0 onwards and are
+        // 5 bytes long each
+        self.registers.i = val as u16 * 0x500;
+        self.registers.pc += 2;
     }
 
     fn ld_bcd(&mut self, opcode: Opcode) {
+        // Store BCD representation of Vx in memory locations I, I+1, and I+2
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let val = self.registers.v[i];
+        self.memory.write_byte(self.registers.i, val / 100);
+        self.memory.write_byte(self.registers.i + 1, val % 100 / 10);
+        self.memory.write_byte(self.registers.i + 2, val % 10);
+        self.registers.pc += 2;
     }
 
     fn ld_i_vx(&mut self, opcode: Opcode) {
+        // Store registers V0 through Vx in memory starting at location I
+        let x = Self::get_index_from_nibble(opcode, 3);
+        for (i, val) in (&self.registers.v[..(x+1)]).iter().enumerate() {
+            self.memory.write_byte(self.registers.i + i as u16, *val);
+        }
+        self.registers.pc += 2;
     }
 
     fn ld_vx_i(&mut self, opcode: Opcode) {
+        // Read registers V0 through Vx from memory starting at location I
+        let x = Self::get_index_from_nibble(opcode, 3);
+        for (i, reg) in (&mut self.registers.v[..(x+1)]).iter_mut().enumerate() {
+            *reg = self.memory.read_byte(self.registers.i + i as u16);
+        }
+        self.registers.pc += 2;
+    }
+
+    fn add_rc(&mut self, opcode: Opcode) {
+        // Set Vx = Vx + kk
+        let reg_index = Self::get_index_from_nibble(opcode, 3);
+        let reg = &mut self.registers.v[reg_index];
+        let val1 = Wrapping(*reg);
+        let val2 = Wrapping(Self::get_low_byte(opcode));
+        *reg = (val1 + val2).0;
+        self.registers.pc += 2;
+    }
+
+    fn add_rr(&mut self, opcode: Opcode) {
+        // Set Vx = Vx + Vy, set VF = carry
+        let i1 = Self::get_index_from_nibble(opcode, 3);
+        let i2 = Self::get_index_from_nibble(opcode, 2);
+        let val1 = Wrapping(self.registers.v[i1]);
+        let val2 = Wrapping(self.registers.v[i2]);
+        let sum = val1 + val2;
+        let carry = sum < val1 && sum < val2;
+        self.registers.v[0xF] = carry as u8;
+        self.registers.v[i1] = sum.0;
+        self.registers.pc += 2;
+    }
+
+    fn add_i_vx(&mut self, opcode: Opcode) {
+        // Set I = I + Vx
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let vx = Wrapping(self.registers.v[i] as u16);
+        let old = Wrapping(self.registers.i);
+        self.registers.i = (old + vx).0;
+        self.registers.pc += 2;
+    }
+
+    fn sub(&mut self, opcode: Opcode) {
+        // Set Vx = Vx - Vy, set VF = NOT borrow
+        let i1 = Self::get_index_from_nibble(opcode, 3);
+        let i2 = Self::get_index_from_nibble(opcode, 2);
+        let val1 = Wrapping(self.registers.v[i1]);
+        let val2 = Wrapping(self.registers.v[i2]);
+        let difference = val1 - val2;
+        let borrow = val1 < val2; // or is it <= ??
+        self.registers.v[0xF] = !borrow as u8;
+        self.registers.v[i1] = difference.0;
+        self.registers.pc += 2;
+    }
+
+    fn subn(&mut self, opcode: Opcode) {
+        // Set Vx = Vy - Vx, set VF = NOT borrow
+        let i1 = Self::get_index_from_nibble(opcode, 3);
+        let i2 = Self::get_index_from_nibble(opcode, 2);
+        let val1 = Wrapping(self.registers.v[i1]);
+        let val2 = Wrapping(self.registers.v[i2]);
+        let difference = val2 - val1;
+        let borrow = val2 < val1; // or is it <= ??
+        self.registers.v[0xF] = !borrow as u8;
+        self.registers.v[i1] = difference.0;
+        self.registers.pc += 2;
+    }
+
+    fn or(&mut self, opcode: Opcode) {
+        // Set Vx = Vx OR Vy
+        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
+        let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        *reg1 = *reg1 | reg2;
+        self.registers.pc += 2;
+    }
+
+    fn and(&mut self, opcode: Opcode) {
+        // Set Vx = Vx AND Vy
+        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
+        let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        *reg1 = *reg1 & reg2;
+        self.registers.pc += 2;
+    }
+
+    fn xor(&mut self, opcode: Opcode) {
+        // Set Vx = Vx XOR Vy
+        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
+        let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        *reg1 = *reg1 ^ reg2;
+        self.registers.pc += 2;
+    }
+
+    fn shr(&mut self, opcode: Opcode) {
+        // Set Vx = Vx SHR 1
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let val = self.registers.v[i];
+        self.registers.v[0xF] = val % 2;
+        self.registers.v[i] = val >> 1;
+        self.registers.pc += 2;
+    }
+
+    fn shl(&mut self, opcode: Opcode) {
+        // Set Vx = Vx SHR 1
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let val = self.registers.v[i];
+        let msb = (val & 0b1000_0000) > 0;
+        self.registers.v[0xF] = msb as u8;
+        self.registers.v[i] = val << 1;
+        self.registers.pc += 2;
+    }
+
+    fn rnd(&mut self, opcode: Opcode) {
+        // Set Vx = random byte AND kk
+        let mut rng = rand::thread_rng();
+        let rand_byte = rng.gen::<u8>();
+        let result = rand_byte & Self::get_low_byte(opcode);
+        let i = Self::get_index_from_nibble(opcode, 3);
+        self.registers.v[i] = result;
+        self.registers.pc += 2;
+    }
+
+    fn drw(&mut self, opcode: Opcode) {
+        let x = Self::get_index_from_nibble(opcode, 3);
+        let y = Self::get_index_from_nibble(opcode, 2);
+        let lines = Self::get_index_from_nibble(opcode, 1);
+        let sprite = self.memory.read_block(self.registers.i, lines);
+        let erased_pixel = self.display.draw_sprite(x, y, sprite);
+        self.registers.v[0xF] = erased_pixel as u8;
+        self.registers.pc += 2;
+    }
+
+    fn skp(&mut self, opcode: Opcode) {
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let key = self.registers.v[i];
+        if self.keyboard.is_pressed(key) {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
+    }
+
+    fn sknp(&mut self, opcode: Opcode) {
+        let i = Self::get_index_from_nibble(opcode, 3);
+        let key = self.registers.v[i];
+        if !self.keyboard.is_pressed(key) {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
+    }
+
+    fn get_address(opcode: Opcode) -> u16 {
+        opcode & 0xFFF
+    }
+
+    fn get_index_from_nibble(opcode: Opcode, nibble: u8) -> usize {
+        let shift = (nibble - 1) * 4;
+        ((opcode & (0xF << shift)) >> shift) as usize
+    }
+
+    fn get_low_byte(opcode: Opcode) -> u8 {
+        (opcode & 0xFF) as u8
     }
 }
