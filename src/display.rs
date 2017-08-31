@@ -1,3 +1,5 @@
+use std::fmt;
+
 const COLS: usize = 64;
 const ROWS: usize = 32;
 const PIXELS: usize = COLS * ROWS;
@@ -17,7 +19,7 @@ impl Display {
     }
 
     pub fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
-        println!("DRAW!");
+        //println!("DRAW!");
         let mut erased_pixel = false;
         for (j, line) in sprite.iter().enumerate() {
             for i in 0..8 {
@@ -58,5 +60,11 @@ impl Display {
 
     fn clear_terminal() {
         print!("{}[2J", 27 as char);
+    }
+}
+
+impl fmt::Debug for Display {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        self.pixels[0].fmt(formatter)
     }
 }

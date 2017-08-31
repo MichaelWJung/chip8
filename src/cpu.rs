@@ -7,6 +7,7 @@ use std::num::Wrapping;
 
 type Opcode = u16;
 
+#[derive(Debug)]
 struct Registers {
     v: [u8; 16],
     stack: [u16; 16],
@@ -31,6 +32,7 @@ impl Registers {
     }
 }
 
+#[derive(Debug)]
 pub struct Cpu<M: Memory> {
     registers: Registers,
     memory: M,
@@ -78,35 +80,35 @@ impl<M: Memory> Cpu<M> {
             0x2000...0x2FFF => self.call(opcode),
             0x3000...0x3FFF => self.se_rc(opcode),
             0x4000...0x4FFF => self.sne_rc(opcode),
-            0x5000...0x5FFF if opcode % 0xF == 0x0 => self.se_rr(opcode),
+            0x5000...0x5FFF if opcode & 0xF == 0x0 => self.se_rr(opcode),
             0x6000...0x6FFF => self.ld_rc(opcode),
             0x7000...0x7FFF => self.add_rc(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x0 => self.ld_rr(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x1 => self.or(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x2 => self.and(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x3 => self.xor(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x4 => self.add_rr(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x5 => self.sub(opcode),
-            0x8000...0x8FFF if opcode % 0xFF == 0x6 => self.shr(opcode),
-            0x8000...0x8FFF if opcode % 0xF == 0x7 => self.subn(opcode),
-            0x8000...0x8FFF if opcode % 0xFF == 0xE => self.shl(opcode),
-            0x9000...0x9FFF if opcode % 0xF == 0x0 => self.sne_rr(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x0 => self.ld_rr(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x1 => self.or(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x2 => self.and(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x3 => self.xor(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x4 => self.add_rr(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x5 => self.sub(opcode),
+            0x8000...0x8FFF if opcode & 0xFF == 0x6 => self.shr(opcode),
+            0x8000...0x8FFF if opcode & 0xF == 0x7 => self.subn(opcode),
+            0x8000...0x8FFF if opcode & 0xFF == 0xE => self.shl(opcode),
+            0x9000...0x9FFF if opcode & 0xF == 0x0 => self.sne_rr(opcode),
             0xA000...0xAFFF => self.ld_addr(opcode),
             0xB000...0xBFFF => self.jp2(opcode),
             0xC000...0xCFFF => self.rnd(opcode),
-            0xD000...0xDFFF if opcode % 0xF != 0x0 => self.drw(opcode),
-            0xE09E...0xEF9E if opcode % 0xFF == 0x9E => self.skp(opcode),
-            0xE0A1...0xEFA1 if opcode % 0xFF == 0xA1 => self.sknp(opcode),
-            0xF007...0xFF07 if opcode % 0xFF == 0x07 => self.ld_vx_dt(opcode),
-            0xF00A...0xFF0A if opcode % 0xFF == 0x0A => self.ld_k(opcode),
-            0xF015...0xFF15 if opcode % 0xFF == 0x15 => self.ld_dt_vx(opcode),
-            0xF018...0xFF18 if opcode % 0xFF == 0x18 => self.ld_st_vx(opcode),
-            0xF01E...0xFF1E if opcode % 0xFF == 0x1E => self.add_i_vx(opcode),
-            0xF029...0xFF29 if opcode % 0xFF == 0x29 => self.ld_sprite(opcode),
-            0xF033...0xFF33 if opcode % 0xFF == 0x33 => self.ld_bcd(opcode),
-            0xF055...0xFF55 if opcode % 0xFF == 0x55 => self.ld_i_vx(opcode),
-            0xF065...0xFF65 if opcode % 0xFF == 0x65 => self.ld_vx_i(opcode),
-            _ => panic!("Opcode unknown"),
+            0xD000...0xDFFF if opcode & 0xF != 0x0 => self.drw(opcode),
+            0xE09E...0xEF9E if opcode & 0xFF == 0x9E => self.skp(opcode),
+            0xE0A1...0xEFA1 if opcode & 0xFF == 0xA1 => self.sknp(opcode),
+            0xF007...0xFF07 if opcode & 0xFF == 0x07 => self.ld_vx_dt(opcode),
+            0xF00A...0xFF0A if opcode & 0xFF == 0x0A => self.ld_k(opcode),
+            0xF015...0xFF15 if opcode & 0xFF == 0x15 => self.ld_dt_vx(opcode),
+            0xF018...0xFF18 if opcode & 0xFF == 0x18 => self.ld_st_vx(opcode),
+            0xF01E...0xFF1E if opcode & 0xFF == 0x1E => self.add_i_vx(opcode),
+            0xF029...0xFF29 if opcode & 0xFF == 0x29 => self.ld_sprite(opcode),
+            0xF033...0xFF33 if opcode & 0xFF == 0x33 => self.ld_bcd(opcode),
+            0xF055...0xFF55 if opcode & 0xFF == 0x55 => self.ld_i_vx(opcode),
+            0xF065...0xFF65 if opcode & 0xFF == 0x65 => self.ld_vx_i(opcode),
+            x => panic!("Opcode unknown: {:X}", x),
         }
     }
 
@@ -120,6 +122,7 @@ impl<M: Memory> Cpu<M> {
         // Return from a subroutine
         self.registers.sp -= 1;
         self.registers.pc = self.registers.stack[self.registers.sp as usize];
+        self.registers.pc += 2;
     }
 
     fn jp(&mut self, opcode: Opcode) {

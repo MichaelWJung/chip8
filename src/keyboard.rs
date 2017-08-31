@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Keyboard {
     key_statuses: [bool; 16],
 }

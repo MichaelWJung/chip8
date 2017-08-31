@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Read;
+use std::fmt;
 
 pub trait Memory {
     fn read_byte(&self, address: u16) -> u8;
@@ -40,5 +41,12 @@ impl Memory for BlockMemory {
     fn read_block(&self, address: u16, size: usize) -> &[u8] {
         let address = address as usize;
         &self.memory[address..(address + size)]
+    }
+}
+
+impl fmt::Debug for BlockMemory {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        //self.memory[..].fmt(formatter)
+        self.memory[0].fmt(formatter)
     }
 }
