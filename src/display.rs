@@ -33,8 +33,9 @@ impl Display {
         self.pixels = [false; PIXELS];
     }
 
-    pub fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
-        //println!("DRAW!");
+    pub fn draw_sprite(&mut self, x: u8, y: u8, sprite: &[u8]) -> bool {
+        let x = x as usize;
+        let y = y as usize;
         let mut erased_pixel = false;
         for (j, line) in sprite.iter().enumerate() {
             for i in 0..8 {

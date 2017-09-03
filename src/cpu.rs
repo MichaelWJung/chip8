@@ -389,8 +389,8 @@ impl<M: Memory> Cpu<M> {
     }
 
     fn drw(&mut self, opcode: Opcode) {
-        let x = Self::get_index_from_nibble(opcode, 3);
-        let y = Self::get_index_from_nibble(opcode, 2);
+        let x = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        let y = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
         let lines = Self::get_index_from_nibble(opcode, 1);
         let sprite = self.memory.read_block(self.registers.i, lines);
         let erased_pixel = self.display.draw_sprite(x, y, sprite);
