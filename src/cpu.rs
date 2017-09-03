@@ -3,13 +3,11 @@ use memory::Memory;
 use keyboard::Keyboard;
 use rand;
 use rand::Rng;
-use sdl2::AudioSubsystem;
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+use sdl2::audio::AudioDevice;
 use std::num::Wrapping;
 
 type Opcode = u16;
 
-#[derive(Debug)]
 struct Registers {
     v: [u8; 16],
     stack: [u16; 16],
@@ -34,34 +32,12 @@ impl Registers {
     }
 }
 
-struct SquareWave {
-    phase_inc: f32,
-    phase: f32,
-    volume: f32
-}
-
-impl AudioCallback for SquareWave {
-    type Channel = f32;
-
-    fn callback(&mut self, out: &mut [f32]) {
-        // Generate a square wave
-        for x in out.iter_mut() {
-            *x = match self.phase {
-                0.0...0.5 => self.volume,
-                _ => -self.volume
-            };
-            self.phase = (self.phase + self.phase_inc) % 1.0;
-        }
-    }
-}
-
 pub struct Cpu<'a, M: Memory> {
     registers: Registers,
     memory: M,
     pub display: Display,
     keyboard: Keyboard<'a>,
-    audio_subsystem: AudioSubsystem,
-    audio_device: Option<AudioDevice<SquareWave>>,
+    audio_device: AudioDevice<::SquareWave>,
 }
 
 trait OpcodeImpl {
@@ -70,14 +46,13 @@ trait OpcodeImpl {
 }
 
 impl<'a, M: Memory> Cpu<'a, M> {
-    pub fn new(memory: M, keyboard: Keyboard, audio_subsystem: AudioSubsystem) -> Cpu<M> {
+    pub fn new(memory: M, keyboard: Keyboard, audio_device: AudioDevice<::SquareWave>) -> Cpu<M> {
         Cpu {
             registers: Registers::new(),
             memory: memory,
             display: Display::new(),
             keyboard,
-            audio_subsystem,
-            audio_device: None,
+            audio_device,
         }
     }
 
@@ -100,35 +75,11 @@ impl<'a, M: Memory> Cpu<'a, M> {
     }
 
     fn start_audio(&mut self) {
-        let desired_spec = AudioSpecDesired {
-            freq: Some(44100),
-            channels: Some(1),  // mono
-            samples: None       // default sample size
-        };
-
-        if let None = self.audio_device {
-            let device = self.audio_subsystem.open_playback(None, &desired_spec, |spec| {
-                // Show obtained AudioSpec
-                println!("{:?}", spec);
-
-                // initialize the audio callback
-                SquareWave {
-                    phase_inc: 440.0 / spec.freq as f32,
-                    phase: 0.0,
-                    volume: 0.25
-                }
-            }).unwrap();
-            self.audio_device = Some(device);
-        }
-        if let Some(ref device) = self.audio_device {
-            device.resume();
-        }
+        self.audio_device.resume();
     }
 
     fn stop_audio(&self) {
-        if let Some(ref device) = self.audio_device {
-            device.pause();
-        }
+        self.audio_device.pause();
     }
 
     fn fetch_opcode(&self) -> Opcode {
