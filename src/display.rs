@@ -13,9 +13,24 @@ impl Display {
         Display { pixels: [false; PIXELS] }
     }
 
+    pub fn redraw(&self) {
+        Self::clear_terminal();
+        for y in 0..ROWS {
+            let b = COLS * y;
+            let e = b + COLS;
+            let line: String = self.pixels[b..e].iter().map(|&p| {
+                if p {
+                    '█'
+                } else {
+                    '.'
+                }
+            }).collect();
+            println!("{}", line);
+        }
+    }
+
     pub fn clear(&mut self) {
         self.pixels = [false; PIXELS];
-        self.redraw();
     }
 
     pub fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
@@ -31,7 +46,6 @@ impl Display {
                 erased_pixel |= self.set_pixel(px, py);
             }
         }
-        self.redraw();
         erased_pixel
     }
 
@@ -40,22 +54,6 @@ impl Display {
         let was_set = self.pixels[i];
         self.pixels[i] ^= true;
         was_set
-    }
-
-    fn redraw(&self) {
-        Self::clear_terminal();
-        for y in 0..ROWS {
-            let b = COLS * y;
-            let e = b + COLS;
-            let line: String = self.pixels[b..e].iter().map(|&p| {
-                if p {
-                    '█'
-                } else {
-                    ' '
-                }
-            }).collect();
-            println!("{}", line);
-        }
     }
 
     fn clear_terminal() {

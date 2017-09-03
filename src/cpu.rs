@@ -36,8 +36,13 @@ impl Registers {
 pub struct Cpu<M: Memory> {
     registers: Registers,
     memory: M,
-    display: Display,
+    pub display: Display,
     keyboard: Keyboard,
+}
+
+trait OpcodeImpl {
+    fn new(opcode: Opcode) -> Self;
+    fn execute(registers: &mut Registers);
 }
 
 impl<M: Memory> Cpu<M> {
@@ -153,6 +158,16 @@ impl<M: Memory> Cpu<M> {
         self.registers.pc += 2;
     }
 
+    fn se_rr(&mut self, opcode: Opcode) {
+        // Skip next instruction if Vx == Vy
+        let reg1 = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
+        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
+        if reg1 == reg2 {
+            self.registers.pc += 2;
+        }
+        self.registers.pc += 2;
+    }
+
     fn sne_rc(&mut self, opcode: Opcode) {
         // Skip next instruction if Vx != kk
         let reg = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
@@ -168,16 +183,6 @@ impl<M: Memory> Cpu<M> {
         let i1 = Self::get_index_from_nibble(opcode, 3);
         let i2 = Self::get_index_from_nibble(opcode, 2);
         if self.registers.v[i1] != self.registers.v[i2] {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
-    fn se_rr(&mut self, opcode: Opcode) {
-        // Skip next instruction if Vx == Vy
-        let reg1 = self.registers.v[Self::get_index_from_nibble(opcode, 3)];
-        let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
-        if reg1 == reg2 {
             self.registers.pc += 2;
         }
         self.registers.pc += 2;
@@ -237,10 +242,10 @@ impl<M: Memory> Cpu<M> {
     fn ld_sprite(&mut self, opcode: Opcode) {
         // Set I = location of sprite for digit Vx
         let i = Self::get_index_from_nibble(opcode, 3);
-        let val = self.registers.v[i] % 0x10;
+        let val = self.registers.v[i] & 0xF;
         // The digit sprites are stored from memory location 0x0 onwards and are
         // 5 bytes long each
-        self.registers.i = val as u16 * 0x500;
+        self.registers.i = val as u16 * 0x5;
         self.registers.pc += 2;
     }
 
@@ -289,7 +294,7 @@ impl<M: Memory> Cpu<M> {
         let val1 = Wrapping(self.registers.v[i1]);
         let val2 = Wrapping(self.registers.v[i2]);
         let sum = val1 + val2;
-        let carry = sum < val1 && sum < val2;
+        let carry = sum < val1;
         self.registers.v[0xF] = carry as u8;
         self.registers.v[i1] = sum.0;
         self.registers.pc += 2;
@@ -334,7 +339,7 @@ impl<M: Memory> Cpu<M> {
         // Set Vx = Vx OR Vy
         let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
         let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
-        *reg1 = *reg1 | reg2;
+        *reg1 |= reg2;
         self.registers.pc += 2;
     }
 
@@ -342,7 +347,7 @@ impl<M: Memory> Cpu<M> {
         // Set Vx = Vx AND Vy
         let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
         let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
-        *reg1 = *reg1 & reg2;
+        *reg1 &= reg2;
         self.registers.pc += 2;
     }
 
@@ -350,7 +355,7 @@ impl<M: Memory> Cpu<M> {
         // Set Vx = Vx XOR Vy
         let reg2 = self.registers.v[Self::get_index_from_nibble(opcode, 2)];
         let reg1 = &mut self.registers.v[Self::get_index_from_nibble(opcode, 3)];
-        *reg1 = *reg1 ^ reg2;
+        *reg1 ^= reg2;
         self.registers.pc += 2;
     }
 
@@ -364,7 +369,7 @@ impl<M: Memory> Cpu<M> {
     }
 
     fn shl(&mut self, opcode: Opcode) {
-        // Set Vx = Vx SHR 1
+        // Set Vx = Vx SHL 1
         let i = Self::get_index_from_nibble(opcode, 3);
         let val = self.registers.v[i];
         let msb = (val & 0b1000_0000) > 0;
