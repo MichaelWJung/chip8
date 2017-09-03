@@ -5,3 +5,4 @@ authors = ["Michael Jung <MichaelWJung@users.noreply.github.com>"]
 
 [dependencies]
 rand = "0.3"
+sdl2 = "0.30"
