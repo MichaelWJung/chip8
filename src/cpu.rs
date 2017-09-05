@@ -1,5 +1,5 @@
 use display::Display;
-use memory::Memory;
+use memory::{BlockMemory, Memory};
 use keyboard::Keyboard;
 use rand;
 use rand::Rng;
@@ -55,19 +55,27 @@ impl Registers {
     }
 }
 
-pub struct Cpu<'a, M: Memory> {
+struct Components<'a, 'b: 'a> {
+    registers: &'a mut Registers,
+    memory: &'a mut BlockMemory,
+    display: &'a mut Display,
+    keyboard: &'a mut Keyboard<'b>,
+    audio_device: &'a mut AudioDevice<::SquareWave>,
+}
+
+pub struct Cpu<'a> {
     registers: Registers,
-    memory: M,
+    memory: BlockMemory,
     pub display: Display,
     keyboard: Keyboard<'a>,
     audio_device: AudioDevice<::SquareWave>,
 }
 
-impl<'a, M: Memory> Cpu<'a, M> {
-    pub fn new(memory: M, keyboard: Keyboard, audio_device: AudioDevice<::SquareWave>) -> Cpu<M> {
+impl<'a> Cpu<'a> {
+    pub fn new(memory: BlockMemory, keyboard: Keyboard, audio_device: AudioDevice<::SquareWave>) -> Cpu {
         Cpu {
             registers: Registers::new(),
-            memory: memory,
+            memory,
             display: Display::new(),
             keyboard,
             audio_device,
@@ -87,17 +95,9 @@ impl<'a, M: Memory> Cpu<'a, M> {
         if self.registers.sound_timer > 0 {
             self.registers.sound_timer -= 1;
             if self.registers.sound_timer == 0 {
-                self.stop_audio();
+                self.audio_device.pause();
             }
         }
-    }
-
-    fn start_audio(&mut self) {
-        self.audio_device.resume();
-    }
-
-    fn stop_audio(&self) {
-        self.audio_device.pause();
     }
 
     fn fetch_opcode(&self) -> Opcode {
@@ -108,322 +108,55 @@ impl<'a, M: Memory> Cpu<'a, M> {
     }
 
     fn execute_opcode(&mut self, opcode: Opcode) {
-        //println!("Executing opcode: {}", opcode);
         match opcode.code {
             0x00e0 => self.create_and_execute::<Cls>(opcode),
             0x00ee => self.create_and_execute::<Ret>(opcode),
             0x1000...0x1FFF => self.create_and_execute::<Jp>(opcode),
             0x2000...0x2FFF => self.create_and_execute::<Call>(opcode),
-            0x3000...0x3FFF => self.se_rc(opcode),
-            0x4000...0x4FFF => self.sne_rc(opcode),
-            0x5000...0x5FFF if opcode.code & 0xF == 0x0 => self.se_rr(opcode),
-            0x6000...0x6FFF => self.ld_rc(opcode),
-            0x7000...0x7FFF => self.add_rc(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x0 => self.ld_rr(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x1 => self.or(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x2 => self.and(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x3 => self.xor(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x4 => self.add_rr(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x5 => self.sub(opcode),
-            0x8000...0x8FFF if opcode.code & 0xFF == 0x6 => self.shr(opcode),
-            0x8000...0x8FFF if opcode.code & 0xF == 0x7 => self.subn(opcode),
-            0x8000...0x8FFF if opcode.code & 0xFF == 0xE => self.shl(opcode),
-            0x9000...0x9FFF if opcode.code & 0xF == 0x0 => self.sne_rr(opcode),
-            0xA000...0xAFFF => self.ld_addr(opcode),
+            0x3000...0x3FFF => self.create_and_execute::<SeXkk>(opcode),
+            0x4000...0x4FFF => self.create_and_execute::<SneXkk>(opcode),
+            0x5000...0x5FFF if opcode.code & 0xF == 0x0 => self.create_and_execute::<SeXy>(opcode),
+            0x6000...0x6FFF => self.create_and_execute::<LdXkk>(opcode),
+            0x7000...0x7FFF => self.create_and_execute::<AddXkk>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x0 => self.create_and_execute::<LdXy>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x1 => self.create_and_execute::<Or>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x2 => self.create_and_execute::<And>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x3 => self.create_and_execute::<Xor>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x4 => self.create_and_execute::<AddXy>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x5 => self.create_and_execute::<Sub>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xFF == 0x6 => self.create_and_execute::<Shr>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xF == 0x7 => self.create_and_execute::<Subn>(opcode),
+            0x8000...0x8FFF if opcode.code & 0xFF == 0xE => self.create_and_execute::<Shl>(opcode),
+            0x9000...0x9FFF if opcode.code & 0xF == 0x0 => self.create_and_execute::<SneXy>(opcode),
+            0xA000...0xAFFF => self.create_and_execute::<LdINnn>(opcode),
             0xB000...0xBFFF => self.create_and_execute::<Jp2>(opcode),
-            0xC000...0xCFFF => self.rnd(opcode),
-            0xD000...0xDFFF if opcode.code & 0xF != 0x0 => self.drw(opcode),
-            0xE09E...0xEF9E if opcode.code & 0xFF == 0x9E => self.skp(opcode),
-            0xE0A1...0xEFA1 if opcode.code & 0xFF == 0xA1 => self.sknp(opcode),
-            0xF007...0xFF07 if opcode.code & 0xFF == 0x07 => self.ld_vx_dt(opcode),
-            0xF00A...0xFF0A if opcode.code & 0xFF == 0x0A => self.ld_k(opcode),
-            0xF015...0xFF15 if opcode.code & 0xFF == 0x15 => self.ld_dt_vx(opcode),
-            0xF018...0xFF18 if opcode.code & 0xFF == 0x18 => self.ld_st_vx(opcode),
-            0xF01E...0xFF1E if opcode.code & 0xFF == 0x1E => self.add_i_vx(opcode),
-            0xF029...0xFF29 if opcode.code & 0xFF == 0x29 => self.ld_sprite(opcode),
-            0xF033...0xFF33 if opcode.code & 0xFF == 0x33 => self.ld_bcd(opcode),
-            0xF055...0xFF55 if opcode.code & 0xFF == 0x55 => self.ld_i_vx(opcode),
-            0xF065...0xFF65 if opcode.code & 0xFF == 0x65 => self.ld_vx_i(opcode),
+            0xC000...0xCFFF => self.create_and_execute::<Rnd>(opcode),
+            0xD000...0xDFFF if opcode.code & 0xF != 0x0 => self.create_and_execute::<Drw>(opcode),
+            0xE09E...0xEF9E if opcode.code & 0xFF == 0x9E => self.create_and_execute::<Skp>(opcode),
+            0xE0A1...0xEFA1 if opcode.code & 0xFF == 0xA1 => self.create_and_execute::<Sknp>(opcode),
+            0xF007...0xFF07 if opcode.code & 0xFF == 0x07 => self.create_and_execute::<LdXDt>(opcode),
+            0xF00A...0xFF0A if opcode.code & 0xFF == 0x0A => self.create_and_execute::<LdKey>(opcode),
+            0xF015...0xFF15 if opcode.code & 0xFF == 0x15 => self.create_and_execute::<LdDtX>(opcode),
+            0xF018...0xFF18 if opcode.code & 0xFF == 0x18 => self.create_and_execute::<LdStX>(opcode),
+            0xF01E...0xFF1E if opcode.code & 0xFF == 0x1E => self.create_and_execute::<AddIX>(opcode),
+            0xF029...0xFF29 if opcode.code & 0xFF == 0x29 => self.create_and_execute::<LdXSprite>(opcode),
+            0xF033...0xFF33 if opcode.code & 0xFF == 0x33 => self.create_and_execute::<LdBcd>(opcode),
+            0xF055...0xFF55 if opcode.code & 0xFF == 0x55 => self.create_and_execute::<LdIX>(opcode),
+            0xF065...0xFF65 if opcode.code & 0xFF == 0x65 => self.create_and_execute::<LdXI>(opcode),
             x => panic!("Opcode unknown: {:X}", x),
         }
     }
 
-    fn se_rc(&mut self, opcode: Opcode) {
-        // Skip next instruction if Vx == kk
-        let reg = self.registers.v[opcode.get_index_from_nibble(3)];
-        let byte = opcode.get_low_byte();
-        if reg == byte {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
-    fn se_rr(&mut self, opcode: Opcode) {
-        // Skip next instruction if Vx == Vy
-        let reg1 = self.registers.v[opcode.get_index_from_nibble(3)];
-        let reg2 = self.registers.v[opcode.get_index_from_nibble(2)];
-        if reg1 == reg2 {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
-    fn sne_rc(&mut self, opcode: Opcode) {
-        // Skip next instruction if Vx != kk
-        let reg = self.registers.v[opcode.get_index_from_nibble(3)];
-        let byte = opcode.get_low_byte();
-        if reg != byte {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
-    fn sne_rr(&mut self, opcode: Opcode) {
-        // Skip next instruction if Vx != Vy
-        let i1 = opcode.get_index_from_nibble(3);
-        let i2 = opcode.get_index_from_nibble(2);
-        if self.registers.v[i1] != self.registers.v[i2] {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
-    fn ld_rc(&mut self, opcode: Opcode) {
-        // Set Vx == kk
-        let byte = opcode.get_low_byte();
-        self.registers.v[opcode.get_index_from_nibble(3)] = byte;
-        self.registers.pc += 2;
-    }
-
-    fn ld_rr(&mut self, opcode: Opcode) {
-        // Set Vx = Vy
-        let reg2 = self.registers.v[opcode.get_index_from_nibble(2)];
-        let reg1 = &mut self.registers.v[opcode.get_index_from_nibble(3)];
-        *reg1 = reg2;
-        self.registers.pc += 2;
-    }
-
-    fn ld_addr(&mut self, opcode: Opcode) {
-        // Set I = nnn
-        self.registers.i = opcode.get_address();
-        self.registers.pc += 2;
-    }
-
-    fn ld_vx_dt(&mut self, opcode: Opcode) {
-        // Set Vx = delay timer value
-        let i = opcode.get_index_from_nibble(3);
-        self.registers.v[i] = self.registers.delay_timer;
-        self.registers.pc += 2;
-    }
-
-    fn ld_k(&mut self, opcode: Opcode) {
-        // Wait for a key press, store the value of the key in Vx.
-        if let Some(key) = self.keyboard.any_key_pressed() {
-            let i = opcode.get_index_from_nibble(3);
-            self.registers.v[i] = key;
-            self.registers.pc += 2;
-        }
-    }
-
-    fn ld_dt_vx(&mut self, opcode: Opcode) {
-        // Set delay timer = Vx
-        let i = opcode.get_index_from_nibble(3);
-        self.registers.delay_timer = self.registers.v[i];
-        self.registers.pc += 2;
-    }
-
-    fn ld_st_vx(&mut self, opcode: Opcode) {
-        // Set sound timer = Vx
-        let i = opcode.get_index_from_nibble(3);
-        self.registers.sound_timer = self.registers.v[i];
-        self.registers.pc += 2;
-        if self.registers.sound_timer > 0 {
-            self.start_audio();
-        } else {
-            self.stop_audio();
-        }
-    }
-
-    fn ld_sprite(&mut self, opcode: Opcode) {
-        // Set I = location of sprite for digit Vx
-        let i = opcode.get_index_from_nibble(3);
-        let val = self.registers.v[i] & 0xF;
-        // The digit sprites are stored from memory location 0x0 onwards and are
-        // 5 bytes long each
-        self.registers.i = val as u16 * 0x5;
-        self.registers.pc += 2;
-    }
-
-    fn ld_bcd(&mut self, opcode: Opcode) {
-        // Store BCD representation of Vx in memory locations I, I+1, and I+2
-        let i = opcode.get_index_from_nibble(3);
-        let val = self.registers.v[i];
-        self.memory.write_byte(self.registers.i, val / 100);
-        self.memory.write_byte(self.registers.i + 1, val % 100 / 10);
-        self.memory.write_byte(self.registers.i + 2, val % 10);
-        self.registers.pc += 2;
-    }
-
-    fn ld_i_vx(&mut self, opcode: Opcode) {
-        // Store registers V0 through Vx in memory starting at location I
-        let x = opcode.get_index_from_nibble(3);
-        for (i, val) in (&self.registers.v[..(x+1)]).iter().enumerate() {
-            self.memory.write_byte(self.registers.i + i as u16, *val);
-        }
-        self.registers.pc += 2;
-    }
-
-    fn ld_vx_i(&mut self, opcode: Opcode) {
-        // Read registers V0 through Vx from memory starting at location I
-        let x = opcode.get_index_from_nibble(3);
-        for (i, reg) in (&mut self.registers.v[..(x+1)]).iter_mut().enumerate() {
-            *reg = self.memory.read_byte(self.registers.i + i as u16);
-        }
-        self.registers.pc += 2;
-    }
-
-    fn add_rc(&mut self, opcode: Opcode) {
-        // Set Vx = Vx + kk
-        let reg_index = opcode.get_index_from_nibble(3);
-        let reg = &mut self.registers.v[reg_index];
-        let val1 = Wrapping(*reg);
-        let val2 = Wrapping(opcode.get_low_byte());
-        *reg = (val1 + val2).0;
-        self.registers.pc += 2;
-    }
-
-    fn add_rr(&mut self, opcode: Opcode) {
-        // Set Vx = Vx + Vy, set VF = carry
-        let i1 = opcode.get_index_from_nibble(3);
-        let i2 = opcode.get_index_from_nibble(2);
-        let val1 = Wrapping(self.registers.v[i1]);
-        let val2 = Wrapping(self.registers.v[i2]);
-        let sum = val1 + val2;
-        let carry = sum < val1;
-        self.registers.v[0xF] = carry as u8;
-        self.registers.v[i1] = sum.0;
-        self.registers.pc += 2;
-    }
-
-    fn add_i_vx(&mut self, opcode: Opcode) {
-        // Set I = I + Vx
-        let i = opcode.get_index_from_nibble(3);
-        let vx = Wrapping(self.registers.v[i] as u16);
-        let old = Wrapping(self.registers.i);
-        self.registers.i = (old + vx).0;
-        self.registers.pc += 2;
-    }
-
-    fn sub(&mut self, opcode: Opcode) {
-        // Set Vx = Vx - Vy, set VF = NOT borrow
-        let i1 = opcode.get_index_from_nibble(3);
-        let i2 = opcode.get_index_from_nibble(2);
-        let val1 = Wrapping(self.registers.v[i1]);
-        let val2 = Wrapping(self.registers.v[i2]);
-        let difference = val1 - val2;
-        let borrow = val1 < val2; // or is it <= ??
-        self.registers.v[0xF] = !borrow as u8;
-        self.registers.v[i1] = difference.0;
-        self.registers.pc += 2;
-    }
-
-    fn subn(&mut self, opcode: Opcode) {
-        // Set Vx = Vy - Vx, set VF = NOT borrow
-        let i1 = opcode.get_index_from_nibble(3);
-        let i2 = opcode.get_index_from_nibble(2);
-        let val1 = Wrapping(self.registers.v[i1]);
-        let val2 = Wrapping(self.registers.v[i2]);
-        let difference = val2 - val1;
-        let borrow = val2 < val1; // or is it <= ??
-        self.registers.v[0xF] = !borrow as u8;
-        self.registers.v[i1] = difference.0;
-        self.registers.pc += 2;
-    }
-
-    fn or(&mut self, opcode: Opcode) {
-        // Set Vx = Vx OR Vy
-        let reg2 = self.registers.v[opcode.get_index_from_nibble(2)];
-        let reg1 = &mut self.registers.v[opcode.get_index_from_nibble(3)];
-        *reg1 |= reg2;
-        self.registers.pc += 2;
-    }
-
-    fn and(&mut self, opcode: Opcode) {
-        // Set Vx = Vx AND Vy
-        let reg2 = self.registers.v[opcode.get_index_from_nibble(2)];
-        let reg1 = &mut self.registers.v[opcode.get_index_from_nibble(3)];
-        *reg1 &= reg2;
-        self.registers.pc += 2;
-    }
-
-    fn xor(&mut self, opcode: Opcode) {
-        // Set Vx = Vx XOR Vy
-        let reg2 = self.registers.v[opcode.get_index_from_nibble(2)];
-        let reg1 = &mut self.registers.v[opcode.get_index_from_nibble(3)];
-        *reg1 ^= reg2;
-        self.registers.pc += 2;
-    }
-
-    fn shr(&mut self, opcode: Opcode) {
-        // Set Vx = Vx SHR 1
-        let i = opcode.get_index_from_nibble(3);
-        let val = self.registers.v[i];
-        self.registers.v[0xF] = val % 2;
-        self.registers.v[i] = val >> 1;
-        self.registers.pc += 2;
-    }
-
-    fn shl(&mut self, opcode: Opcode) {
-        // Set Vx = Vx SHL 1
-        let i = opcode.get_index_from_nibble(3);
-        let val = self.registers.v[i];
-        let msb = (val & 0b1000_0000) > 0;
-        self.registers.v[0xF] = msb as u8;
-        self.registers.v[i] = val << 1;
-        self.registers.pc += 2;
-    }
-
-    fn rnd(&mut self, opcode: Opcode) {
-        // Set Vx = random byte AND kk
-        let mut rng = rand::thread_rng();
-        let rand_byte = rng.gen::<u8>();
-        let result = rand_byte & opcode.get_low_byte();
-        let i = opcode.get_index_from_nibble(3);
-        self.registers.v[i] = result;
-        self.registers.pc += 2;
-    }
-
-    fn drw(&mut self, opcode: Opcode) {
-        let x = self.registers.v[opcode.get_index_from_nibble(3)];
-        let y = self.registers.v[opcode.get_index_from_nibble(2)];
-        let lines = opcode.get_index_from_nibble(1);
-        let sprite = self.memory.read_block(self.registers.i, lines);
-        let erased_pixel = self.display.draw_sprite(x, y, sprite);
-        self.registers.v[0xF] = erased_pixel as u8;
-        self.registers.pc += 2;
-    }
-
-    fn skp(&mut self, opcode: Opcode) {
-        let i = opcode.get_index_from_nibble(3);
-        let key = self.registers.v[i];
-        if self.keyboard.is_pressed(key) {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
-    fn sknp(&mut self, opcode: Opcode) {
-        let i = opcode.get_index_from_nibble(3);
-        let key = self.registers.v[i];
-        if !self.keyboard.is_pressed(key) {
-            self.registers.pc += 2;
-        }
-        self.registers.pc += 2;
-    }
-
     fn create_and_execute<Op: OpConstruct + OpExecute>(&mut self, opcode: Opcode) {
         let op = Op::new(opcode);
-        op.execute(&mut self.registers, &mut self.display);
+        let components = Components {
+            registers: &mut self.registers,
+            memory: &mut self.memory,
+            display: &mut self.display,
+            keyboard: &mut self.keyboard,
+            audio_device: &mut self.audio_device,
+        };
+        op.execute(components);
     }
 }
 
@@ -432,7 +165,7 @@ trait OpConstruct {
 }
 
 trait OpExecute {
-    fn execute(&self, registers: &mut Registers, display: &mut Display);
+    fn execute(&self, c: Components);
 }
 
 macro_rules! create_opcode_struct {
@@ -461,47 +194,445 @@ macro_rules! create_opcode_struct_nnn {
     }
 }
 
+macro_rules! create_opcode_struct_x {
+    ($name:ident) => {
+        struct $name {
+            x: usize,
+        }
+
+        impl OpConstruct for $name {
+            fn new(opcode: Opcode) -> Self {
+                $name { x: opcode.get_index_from_nibble(3) }
+            }
+        }
+    }
+}
+
+macro_rules! create_opcode_struct_xy {
+    ($name:ident) => {
+        struct $name {
+            x: usize,
+            y: usize,
+        }
+
+        impl OpConstruct for $name {
+            fn new(opcode: Opcode) -> Self {
+                $name {
+                    x: opcode.get_index_from_nibble(3),
+                    y: opcode.get_index_from_nibble(2),
+                }
+            }
+        }
+    }
+}
+
+macro_rules! create_opcode_struct_xyn {
+    ($name:ident) => {
+        struct $name {
+            x: usize,
+            y: usize,
+            n: usize,
+        }
+
+        impl OpConstruct for $name {
+            fn new(opcode: Opcode) -> Self {
+                $name {
+                    x: opcode.get_index_from_nibble(3),
+                    y: opcode.get_index_from_nibble(2),
+                    n: opcode.get_index_from_nibble(1),
+                }
+            }
+        }
+    }
+}
+
+macro_rules! create_opcode_struct_xkk {
+    ($name:ident) => {
+        struct $name {
+            x: usize,
+            kk: u8,
+        }
+
+        impl OpConstruct for $name {
+            fn new(opcode: Opcode) -> Self {
+                $name {
+                    x: opcode.get_index_from_nibble(3),
+                    kk: opcode.get_low_byte(),
+                }
+            }
+        }
+    }
+}
+
 // Clear screen
 create_opcode_struct!(Cls);
 impl OpExecute for Cls {
-    fn execute(&self, registers: &mut Registers, display: &mut Display) {
-        display.clear();
-        registers.pc += 2;
+    fn execute(&self, c: Components) {
+        c.display.clear();
+        c.registers.pc += 2;
     }
 }
 
 // Return from a subroutine
 create_opcode_struct!(Ret);
 impl OpExecute for Ret {
-    fn execute(&self, registers: &mut Registers, _: &mut Display) {
-        registers.sp -= 1;
-        registers.pc = registers.stack[registers.sp as usize];
-        registers.pc += 2;
+    fn execute(&self, c: Components) {
+        c.registers.sp -= 1;
+        c.registers.pc = c.registers.stack[c.registers.sp as usize];
+        c.registers.pc += 2;
     }
 }
 
 // Jump to location at nnn
 create_opcode_struct_nnn!(Jp);
 impl OpExecute for Jp {
-    fn execute(&self, registers: &mut Registers, _: &mut Display) {
-        registers.pc = self.nnn;
+    fn execute(&self, c: Components) {
+        c.registers.pc = self.nnn;
     }
 }
 
 // Jump to location nnn + V0
 create_opcode_struct_nnn!(Jp2);
 impl OpExecute for Jp2 {
-    fn execute(&self, registers: &mut Registers, _: &mut Display) {
-        registers.pc = registers.v[0] as u16 + self.nnn;
+    fn execute(&self, c: Components) {
+        c.registers.pc = c.registers.v[0] as u16 + self.nnn;
     }
 }
 
 // Call subroutine at nnn
 create_opcode_struct_nnn!(Call);
 impl OpExecute for Call {
-    fn execute(&self, registers: &mut Registers, _: &mut Display) {
-        registers.stack[registers.sp as usize] = registers.pc;
-        registers.sp += 1;
-        registers.pc = self.nnn;
+    fn execute(&self, c: Components) {
+        c.registers.stack[c.registers.sp as usize] = c.registers.pc;
+        c.registers.sp += 1;
+        c.registers.pc = self.nnn;
     }
 }
+
+// Skip next instruction if Vx == kk
+create_opcode_struct_xkk!(SeXkk);
+impl OpExecute for SeXkk {
+    fn execute(&self, c: Components) {
+        if c.registers.v[self.x] == self.kk {
+            c.registers.pc += 2;
+        }
+        c.registers.pc += 2;
+    }
+}
+
+// Skip next instruction if Vx == Vy
+create_opcode_struct_xy!(SeXy);
+impl OpExecute for SeXy {
+    fn execute(&self, c: Components) {
+        if c.registers.v[self.x] == c.registers.v[self.y] {
+            c.registers.pc += 2;
+        }
+        c.registers.pc += 2;
+    }
+}
+
+// Skip next instruction if Vx != kk
+create_opcode_struct_xkk!(SneXkk);
+impl OpExecute for SneXkk {
+    fn execute(&self, c: Components) {
+        if c.registers.v[self.x] != self.kk {
+            c.registers.pc += 2;
+        }
+        c.registers.pc += 2;
+    }
+}
+
+// Skip next instruction if Vx != Vy
+create_opcode_struct_xy!(SneXy);
+impl OpExecute for SneXy {
+    fn execute(&self, c: Components) {
+        if c.registers.v[self.x] != c.registers.v[self.y] {
+            c.registers.pc += 2;
+        }
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx == kk
+create_opcode_struct_xkk!(LdXkk);
+impl OpExecute for LdXkk {
+    fn execute(&self, c: Components) {
+        c.registers.v[self.x] = self.kk;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vy
+create_opcode_struct_xy!(LdXy);
+impl OpExecute for LdXy {
+    fn execute(&self, c: Components) {
+        c.registers.v[self.x] = c.registers.v[self.y];
+        c.registers.pc += 2;
+    }
+}
+
+// Set I = nnn
+create_opcode_struct_nnn!(LdINnn);
+impl OpExecute for LdINnn {
+    fn execute(&self, c: Components) {
+        c.registers.i = self.nnn;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = delay timer value
+create_opcode_struct_x!(LdXDt);
+impl OpExecute for LdXDt {
+    fn execute(&self, c: Components) {
+        c.registers.v[self.x] = c.registers.delay_timer;
+        c.registers.pc += 2;
+    }
+}
+
+// Wait for a key press, store the value of the key in Vx.
+create_opcode_struct_x!(LdKey);
+impl OpExecute for LdKey {
+    fn execute(&self, c: Components) {
+        if let Some(key) = c.keyboard.any_key_pressed() {
+            c.registers.v[self.x] = key;
+            c.registers.pc += 2;
+        }
+    }
+}
+
+// Set delay timer = Vx
+create_opcode_struct_x!(LdDtX);
+impl OpExecute for LdDtX {
+    fn execute(&self, c: Components) {
+        c.registers.delay_timer = c.registers.v[self.x];
+        c.registers.pc += 2;
+    }
+}
+
+// Set sound timer = Vx
+create_opcode_struct_x!(LdStX);
+impl OpExecute for LdStX {
+    fn execute(&self, c: Components) {
+        c.registers.sound_timer = c.registers.v[self.x];
+        c.registers.pc += 2;
+        if c.registers.sound_timer > 0 {
+            c.audio_device.resume();
+        } else {
+            c.audio_device.pause();
+        }
+    }
+}
+
+// Set I = location of sprite for digit Vx
+create_opcode_struct_x!(LdXSprite);
+impl OpExecute for LdXSprite {
+    fn execute(&self, c: Components) {
+        let val = c.registers.v[self.x] & 0xF;
+        // The digit sprites are stored from memory location 0x0 onwards and are
+        // 5 bytes long each
+        c.registers.i = val as u16 * 0x5;
+        c.registers.pc += 2;
+    }
+}
+
+// Store BCD representation of Vx in memory locations I, I+1, and I+2
+create_opcode_struct_x!(LdBcd);
+impl OpExecute for LdBcd {
+    fn execute(&self, c: Components) {
+        let val = c.registers.v[self.x];
+        c.memory.write_byte(c.registers.i, val / 100);
+        c.memory.write_byte(c.registers.i + 1, val % 100 / 10);
+        c.memory.write_byte(c.registers.i + 2, val % 10);
+        c.registers.pc += 2;
+    }
+}
+
+// Store registers V0 through Vx in memory starting at location I
+create_opcode_struct_x!(LdIX);
+impl OpExecute for LdIX {
+    fn execute(&self, c: Components) {
+        for (j, val) in (&c.registers.v[..(self.x+1)]).iter().enumerate() {
+            c.memory.write_byte(c.registers.i + j as u16, *val);
+        }
+        c.registers.pc += 2;
+    }
+}
+
+// Read registers V0 through Vx from memory starting at location I
+create_opcode_struct_x!(LdXI);
+impl OpExecute for LdXI {
+    fn execute(&self, c: Components) {
+        for (j, reg) in (&mut c.registers.v[..(self.x+1)]).iter_mut().enumerate() {
+            *reg = c.memory.read_byte(c.registers.i + j as u16);
+        }
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx + kk
+create_opcode_struct_xkk!(AddXkk);
+impl OpExecute for AddXkk {
+    fn execute(&self, c: Components) {
+        let vx = &mut c.registers.v[self.x];
+        let val1 = Wrapping(*vx);
+        let val2 = Wrapping(self.kk);
+        *vx = (val1 + val2).0;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx + Vy, set VF = carry
+create_opcode_struct_xy!(AddXy);
+impl OpExecute for AddXy {
+    fn execute(&self, c: Components) {
+        let val1 = Wrapping(c.registers.v[self.x]);
+        let val2 = Wrapping(c.registers.v[self.y]);
+        let sum = val1 + val2;
+        let carry = sum < val1;
+        c.registers.v[0xF] = carry as u8;
+        c.registers.v[self.x] = sum.0;
+        c.registers.pc += 2;
+    }
+}
+
+// Set I = I + Vx
+create_opcode_struct_x!(AddIX);
+impl OpExecute for AddIX {
+    fn execute(&self, c: Components) {
+        let vx = Wrapping(c.registers.v[self.x] as u16);
+        let i = Wrapping(c.registers.i);
+        c.registers.i = (i + vx).0;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx - Vy, set VF = NOT borrow
+create_opcode_struct_xy!(Sub);
+impl OpExecute for Sub {
+    fn execute(&self, c: Components) {
+        let vx = Wrapping(c.registers.v[self.x]);
+        let vy = Wrapping(c.registers.v[self.y]);
+        let difference = vx - vy;
+        let borrow = vx < vy;
+        c.registers.v[0xF] = !borrow as u8;
+        c.registers.v[self.x] = difference.0;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vy - Vx, set VF = NOT borrow
+create_opcode_struct_xy!(Subn);
+impl OpExecute for Subn {
+    fn execute(&self, c: Components) {
+        let vx = Wrapping(c.registers.v[self.x]);
+        let vy = Wrapping(c.registers.v[self.y]);
+        let difference = vy - vx;
+        let borrow = vy < vx;
+        c.registers.v[0xF] = !borrow as u8;
+        c.registers.v[self.x] = difference.0;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx OR Vy
+create_opcode_struct_xy!(Or);
+impl OpExecute for Or {
+    fn execute(&self, c: Components) {
+        let vy = c.registers.v[self.y];
+        let vx = &mut c.registers.v[self.x];
+        *vx |= vy;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx AND Vy
+create_opcode_struct_xy!(And);
+impl OpExecute for And {
+    fn execute(&self, c: Components) {
+        let vy = c.registers.v[self.y];
+        let vx = &mut c.registers.v[self.x];
+        *vx &= vy;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx XOR Vy
+create_opcode_struct_xy!(Xor);
+impl OpExecute for Xor {
+    fn execute(&self, c: Components) {
+        let vy = c.registers.v[self.y];
+        let vx = &mut c.registers.v[self.x];
+        *vx ^= vy;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx SHR 1
+create_opcode_struct_x!(Shr);
+impl OpExecute for Shr {
+    fn execute(&self, c: Components) {
+        let val = c.registers.v[self.x];
+        c.registers.v[0xF] = val % 1;
+        c.registers.v[self.x] = val >> 1;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = Vx SHL 1
+create_opcode_struct_x!(Shl);
+impl OpExecute for Shl {
+    fn execute(&self, c: Components) {
+        let val = c.registers.v[self.x];
+        let msb = (val & 0b1000_0000) > 0;
+        c.registers.v[0xF] = msb as u8;
+        c.registers.v[self.x] = val << 1;
+        c.registers.pc += 2;
+    }
+}
+
+// Set Vx = random byte AND kk
+create_opcode_struct_xkk!(Rnd);
+impl OpExecute for Rnd {
+    fn execute(&self, c: Components) {
+        let mut rng = rand::thread_rng();
+        let rand_byte = rng.gen::<u8>();
+        let result = rand_byte & self.kk;
+        c.registers.v[self.x] = result;
+        c.registers.pc += 2;
+    }
+}
+
+create_opcode_struct_xyn!(Drw);
+impl OpExecute for Drw {
+    fn execute(&self, c: Components) {
+        let x = c.registers.v[self.x];
+        let y = c.registers.v[self.y];
+        let sprite = c.memory.read_block(c.registers.i, self.n);
+        let erased_pixel = c.display.draw_sprite(x, y, sprite);
+        c.registers.v[0xF] = erased_pixel as u8;
+        c.registers.pc += 2;
+    }
+}
+
+create_opcode_struct_x!(Skp);
+impl OpExecute for Skp {
+    fn execute(&self, c: Components) {
+        let key = c.registers.v[self.x];
+        if c.keyboard.is_pressed(key) {
+            c.registers.pc += 2;
+        }
+        c.registers.pc += 2;
+    }
+}
+
+create_opcode_struct_x!(Sknp);
+impl OpExecute for Sknp {
+    fn execute(&self, c: Components) {
+        let key = c.registers.v[self.x];
+        if !c.keyboard.is_pressed(key) {
+            c.registers.pc += 2;
+        }
+        c.registers.pc += 2;
+    }
+}
+

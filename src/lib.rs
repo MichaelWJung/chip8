@@ -22,7 +22,7 @@ pub fn run(file: &mut File) {
 
     let keyboard = keyboard::Keyboard::new(&mut event_pump);
     let memory = memory::BlockMemory::new(file);
-    let mut cpu = cpu::Cpu::<memory::BlockMemory>::new(memory, keyboard, audio_device);
+    let mut cpu = cpu::Cpu::new(memory, keyboard, audio_device);
     loop {
         for _ in 0..10 {
             cpu.cycle();
