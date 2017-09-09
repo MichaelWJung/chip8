@@ -28,7 +28,6 @@ impl Opcode {
     fn get_low_byte(&self) -> u8 {
         (self.code & 0xFF) as u8
     }
-
 }
 
 struct Registers {
