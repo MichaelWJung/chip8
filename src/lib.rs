@@ -17,12 +17,20 @@ pub fn run(file: &mut File) {
     let audio_subsystem = sdl_context.audio().unwrap();
     let audio_device = create_audio_device(&audio_subsystem);
 
-    let window = video_subsystem.window("chip8", 80, 60).position_centered().build().unwrap();
+    let window = video_subsystem.window("chip8", 640, 320)
+        .position_centered()
+        .opengl()
+        .build()
+        .unwrap();
+    let canvas = window.into_canvas().build().unwrap();
+    let texture_creator = canvas.texture_creator();
+
     let mut event_pump = sdl_context.event_pump().unwrap();
 
+    let display = display::Display::new(canvas, &texture_creator);
     let keyboard = keyboard::Keyboard::new(&mut event_pump);
     let memory = memory::BlockMemory::new(file);
-    let mut cpu = cpu::Cpu::new(memory, keyboard, audio_device);
+    let mut cpu = cpu::Cpu::new(memory, display, keyboard, audio_device);
     loop {
         for _ in 0..10 {
             cpu.cycle();

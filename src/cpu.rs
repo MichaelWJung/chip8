@@ -54,28 +54,33 @@ impl Registers {
     }
 }
 
-struct Components<'a, 'b: 'a> {
+struct Components<'a, 'b: 'a, 'c: 'a> {
     registers: &'a mut Registers,
     memory: &'a mut BlockMemory,
-    display: &'a mut Display,
+    display: &'a mut Display<'c>,
     keyboard: &'a mut Keyboard<'b>,
     audio_device: &'a mut AudioDevice<::SquareWave>,
 }
 
-pub struct Cpu<'a> {
+pub struct Cpu<'a, 'b> {
     registers: Registers,
     memory: BlockMemory,
-    pub display: Display,
-    keyboard: Keyboard<'a>,
+    pub display: Display<'a>,
+    keyboard: Keyboard<'b>,
     audio_device: AudioDevice<::SquareWave>,
 }
 
-impl<'a> Cpu<'a> {
-    pub fn new(memory: BlockMemory, keyboard: Keyboard, audio_device: AudioDevice<::SquareWave>) -> Cpu {
+impl<'a, 'b> Cpu<'a, 'b> {
+    pub fn new(
+        memory: BlockMemory,
+        display: Display<'a>,
+        keyboard: Keyboard<'b>,
+        audio_device: AudioDevice<::SquareWave>
+    ) -> Cpu<'a, 'b> {
         Cpu {
             registers: Registers::new(),
             memory,
-            display: Display::new(),
+            display,
             keyboard,
             audio_device,
         }

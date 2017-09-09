@@ -1,32 +1,38 @@
-use std::fmt;
+use sdl2::pixels::PixelFormatEnum;
+use sdl2::render::{Canvas, Texture, TextureCreator};
+use sdl2::video::{Window, WindowContext};
 
 const COLS: usize = 64;
 const ROWS: usize = 32;
-const PIXELS: usize = COLS * ROWS;
+const PIXELS: usize = (COLS * ROWS) as usize;
 
-pub struct Display {
+pub struct Display<'a> {
     pixels: [bool; PIXELS],
+    canvas: Canvas<Window>,
+    texture: Texture<'a>,
 }
 
-impl Display {
-    pub fn new() -> Display {
-        Display { pixels: [false; PIXELS] }
+impl<'a> Display<'a> {
+    pub fn new(canvas: Canvas<Window>, texture_creator: &'a TextureCreator<WindowContext>) -> Display<'a> {
+        let texture = texture_creator.create_texture_streaming(
+            PixelFormatEnum::RGB24, COLS as u32, ROWS as u32).unwrap();
+        Display { pixels: [false; PIXELS], canvas, texture }
     }
 
-    pub fn redraw(&self) {
-        Self::clear_terminal();
-        for y in 0..ROWS {
-            let b = COLS * y;
-            let e = b + COLS;
-            let line: String = self.pixels[b..e].iter().map(|&p| {
-                if p {
-                    '█'
-                } else {
-                    '.'
-                }
-            }).collect();
-            println!("{}", line);
-        }
+    pub fn redraw(&mut self) {
+        let pixels = &self.pixels;
+        self.texture.with_lock(None, |buffer: &mut [u8], _: usize| {
+            for (i, &p) in pixels.iter().enumerate() {
+                let offset = i * 3;
+                let val = p as u8 * 255;
+                buffer[offset] = val;
+                buffer[offset + 1] = val;
+                buffer[offset + 2] = val;
+            }
+        }).unwrap();
+        self.canvas.clear();
+        self.canvas.copy(&self.texture, None, None).unwrap();
+        self.canvas.present();
     }
 
     pub fn clear(&mut self) {
@@ -56,14 +62,5 @@ impl Display {
         self.pixels[i] ^= true;
         was_set
     }
-
-    fn clear_terminal() {
-        print!("{}[2J", 27 as char);
-    }
 }
 
-impl fmt::Debug for Display {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        self.pixels[0].fmt(formatter)
-    }
-}
