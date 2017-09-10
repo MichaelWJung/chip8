@@ -13,14 +13,13 @@ pub struct BlockMemory {
 }
 
 impl BlockMemory {
-    pub fn new(file: &mut File) -> BlockMemory {
+    pub fn new() -> BlockMemory {
         let mut memory = BlockMemory { memory: [0; 4096] };
-        memory.load_rom(file);
         memory.initialize_sprites();
         memory
     }
 
-    fn load_rom(&mut self, file: &mut File) {
+    pub fn load_rom(&mut self, file: &mut File) {
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes).unwrap();
         let size = bytes.len();

@@ -21,7 +21,10 @@ pub fn run(file: &mut File) {
 
     let display = display::Display::new(&mut display_context);
     let keyboard = keyboard::Keyboard::new(&mut event_pump);
-    let memory = memory::BlockMemory::new(file);
+
+    let mut memory = memory::BlockMemory::new();
+    memory.load_rom(file);
+
     let mut cpu = cpu::Cpu::new(memory, display, keyboard, audio_device);
     loop {
         for _ in 0..10 {
