@@ -1,3 +1,4 @@
+use sdl2::VideoSubsystem;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
@@ -6,17 +7,35 @@ const COLS: usize = 64;
 const ROWS: usize = 32;
 const PIXELS: usize = (COLS * ROWS) as usize;
 
+pub struct DisplayContext {
+    canvas: Canvas<Window>,
+    texture_creator: TextureCreator<WindowContext>,
+}
+
+impl DisplayContext {
+    pub fn new(video_subsystem: &VideoSubsystem) -> DisplayContext {
+        let window = video_subsystem.window("chip8", 10*COLS as u32, 10*ROWS as u32)
+            .position_centered()
+            .opengl()
+            .build()
+            .unwrap();
+        let canvas = window.into_canvas().build().unwrap();
+        let texture_creator = canvas.texture_creator();
+        DisplayContext { canvas, texture_creator }
+    }
+}
+
 pub struct Display<'a> {
     pixels: [bool; PIXELS],
-    canvas: Canvas<Window>,
+    canvas: &'a mut Canvas<Window>,
     texture: Texture<'a>,
 }
 
 impl<'a> Display<'a> {
-    pub fn new(canvas: Canvas<Window>, texture_creator: &'a TextureCreator<WindowContext>) -> Display<'a> {
-        let texture = texture_creator.create_texture_streaming(
+    pub fn new(display_context: &'a mut DisplayContext) -> Display<'a> {
+        let texture = display_context.texture_creator.create_texture_streaming(
             PixelFormatEnum::RGB24, COLS as u32, ROWS as u32).unwrap();
-        Display { pixels: [false; PIXELS], canvas, texture }
+        Display { pixels: [false; PIXELS], canvas: &mut display_context.canvas, texture }
     }
 
     pub fn redraw(&mut self) {

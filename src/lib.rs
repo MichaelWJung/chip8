@@ -1,13 +1,12 @@
 extern crate rand;
 extern crate sdl2;
 
+mod audio;
 mod cpu;
 mod display;
 mod memory;
 mod keyboard;
 
-use sdl2::AudioSubsystem;
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use std::fs::File;
 use std::{thread, time};
 
@@ -15,19 +14,12 @@ pub fn run(file: &mut File) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
-    let audio_device = create_audio_device(&audio_subsystem);
+    let audio_device = audio::create_audio_device(&audio_subsystem);
 
-    let window = video_subsystem.window("chip8", 640, 320)
-        .position_centered()
-        .opengl()
-        .build()
-        .unwrap();
-    let canvas = window.into_canvas().build().unwrap();
-    let texture_creator = canvas.texture_creator();
-
+    let mut display_context = display::DisplayContext::new(&video_subsystem);
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let display = display::Display::new(canvas, &texture_creator);
+    let display = display::Display::new(&mut display_context);
     let keyboard = keyboard::Keyboard::new(&mut event_pump);
     let memory = memory::BlockMemory::new(file);
     let mut cpu = cpu::Cpu::new(memory, display, keyboard, audio_device);
@@ -38,43 +30,6 @@ pub fn run(file: &mut File) {
         thread::sleep(time::Duration::from_millis(17));
         cpu.decrement_timers();
         cpu.display.redraw();
-    }
-}
-
-fn create_audio_device(audio_subsystem: &AudioSubsystem) -> AudioDevice<SquareWave> {
-    let desired_spec = AudioSpecDesired {
-        freq: Some(44100),
-        channels: Some(1),  // mono
-        samples: None       // default sample size
-    };
-    audio_subsystem.open_playback(None, &desired_spec, |spec| {
-        SquareWave {
-            phase_inc: 440.0 / spec.freq as f32,
-            phase: 0.0,
-            volume: 0.25
-        }
-    }).unwrap()
-}
-
-pub struct SquareWave {
-    phase_inc: f32,
-    phase: f32,
-    volume: f32
-}
-
-impl AudioCallback for SquareWave {
-    type Channel = f32;
-
-    fn callback(&mut self, out: &mut [f32]) {
-        // Generate a square wave
-        for x in out.iter_mut() {
-            *x = if self.phase >= 0.0 && self.phase <= 0.5 {
-                self.volume
-            } else {
-                -self.volume
-            };
-            self.phase = (self.phase + self.phase_inc) % 1.0;
-        }
     }
 }
 

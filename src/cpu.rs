@@ -1,9 +1,9 @@
+use audio::AudioDevice;
 use display::Display;
 use memory::{BlockMemory, Memory};
 use keyboard::Keyboard;
 use rand;
 use rand::Rng;
-use sdl2::audio::AudioDevice;
 use std::num::Wrapping;
 
 #[derive(Copy, Clone)]
@@ -59,7 +59,7 @@ struct Components<'a, 'b: 'a, 'c: 'a> {
     memory: &'a mut BlockMemory,
     display: &'a mut Display<'c>,
     keyboard: &'a mut Keyboard<'b>,
-    audio_device: &'a mut AudioDevice<::SquareWave>,
+    audio_device: &'a mut AudioDevice,
 }
 
 pub struct Cpu<'a, 'b> {
@@ -67,7 +67,7 @@ pub struct Cpu<'a, 'b> {
     memory: BlockMemory,
     pub display: Display<'a>,
     keyboard: Keyboard<'b>,
-    audio_device: AudioDevice<::SquareWave>,
+    audio_device: AudioDevice,
 }
 
 impl<'a, 'b> Cpu<'a, 'b> {
@@ -75,7 +75,7 @@ impl<'a, 'b> Cpu<'a, 'b> {
         memory: BlockMemory,
         display: Display<'a>,
         keyboard: Keyboard<'b>,
-        audio_device: AudioDevice<::SquareWave>
+        audio_device: AudioDevice,
     ) -> Cpu<'a, 'b> {
         Cpu {
             registers: Registers::new(),
