@@ -12,14 +12,15 @@ use std::{thread, time};
 
 pub fn run(file: &mut File) {
     let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
+
     let audio_subsystem = sdl_context.audio().unwrap();
     let audio_device = audio::create_audio_device(&audio_subsystem);
 
+    let video_subsystem = sdl_context.video().unwrap();
     let mut display_context = display::DisplayContext::new(&video_subsystem);
-    let mut event_pump = sdl_context.event_pump().unwrap();
-
     let display = display::Display::new(&mut display_context);
+
+    let mut event_pump = sdl_context.event_pump().unwrap();
     let keyboard = keyboard::Keyboard::new(&mut event_pump);
 
     let mut memory = memory::BlockMemory::new();
