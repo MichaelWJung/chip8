@@ -1,10 +1,11 @@
-use sdl2::AudioSubsystem;
 use sdl2::audio;
+use sdl2::Sdl;
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
 
 pub type AudioDevice = audio::AudioDevice<SquareWave>;
 
-pub fn create_audio_device(audio_subsystem: &AudioSubsystem) -> AudioDevice {
+pub fn create_audio_device(sdl_context: &Sdl) -> AudioDevice {
+    let audio_subsystem = sdl_context.audio().unwrap();
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),  // mono

@@ -1,4 +1,4 @@
-use sdl2::VideoSubsystem;
+use sdl2::Sdl;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
@@ -13,7 +13,8 @@ pub struct DisplayContext {
 }
 
 impl DisplayContext {
-    pub fn new(video_subsystem: &VideoSubsystem) -> DisplayContext {
+    pub fn new(sdl_context: &Sdl) -> DisplayContext {
+        let video_subsystem = sdl_context.video().unwrap();
         let window = video_subsystem.window("chip8", 10*COLS as u32, 10*ROWS as u32)
             .position_centered()
             .opengl()

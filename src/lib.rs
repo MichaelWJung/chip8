@@ -13,11 +13,9 @@ use std::{thread, time};
 pub fn run(file: &mut File) {
     let sdl_context = sdl2::init().unwrap();
 
-    let audio_subsystem = sdl_context.audio().unwrap();
-    let audio_device = audio::create_audio_device(&audio_subsystem);
+    let audio_device = audio::create_audio_device(&sdl_context);
 
-    let video_subsystem = sdl_context.video().unwrap();
-    let mut display_context = display::DisplayContext::new(&video_subsystem);
+    let mut display_context = display::DisplayContext::new(&sdl_context);
     let display = display::Display::new(&mut display_context);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
