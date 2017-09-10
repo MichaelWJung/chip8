@@ -8,22 +8,24 @@ pub fn create_audio_device(sdl_context: &Sdl) -> AudioDevice {
     let audio_subsystem = sdl_context.audio().unwrap();
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
-        channels: Some(1),  // mono
-        samples: None       // default sample size
+        channels: Some(1), // mono
+        samples: None, // default sample size
     };
-    audio_subsystem.open_playback(None, &desired_spec, |spec| {
-        SquareWave {
-            phase_inc: 440.0 / spec.freq as f32,
-            phase: 0.0,
-            volume: 0.25
-        }
-    }).unwrap()
+    audio_subsystem
+        .open_playback(None, &desired_spec, |spec| {
+            SquareWave {
+                phase_inc: 440.0 / spec.freq as f32,
+                phase: 0.0,
+                volume: 0.25,
+            }
+        })
+        .unwrap()
 }
 
 pub struct SquareWave {
     phase_inc: f32,
     phase: f32,
-    volume: f32
+    volume: f32,
 }
 
 impl AudioCallback for SquareWave {
@@ -41,4 +43,3 @@ impl AudioCallback for SquareWave {
         }
     }
 }
-

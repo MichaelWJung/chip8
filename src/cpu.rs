@@ -459,7 +459,7 @@ impl OpExecute for LdBcd {
 create_opcode_struct_x!(LdIX);
 impl OpExecute for LdIX {
     fn execute(&self, c: Components) {
-        for (j, val) in (&c.registers.v[..(self.x+1)]).iter().enumerate() {
+        for (j, val) in (&c.registers.v[..(self.x + 1)]).iter().enumerate() {
             c.memory.write_byte(c.registers.i + j as u16, *val);
         }
         c.registers.pc += 2;
@@ -470,7 +470,7 @@ impl OpExecute for LdIX {
 create_opcode_struct_x!(LdXI);
 impl OpExecute for LdXI {
     fn execute(&self, c: Components) {
-        for (j, reg) in (&mut c.registers.v[..(self.x+1)]).iter_mut().enumerate() {
+        for (j, reg) in (&mut c.registers.v[..(self.x + 1)]).iter_mut().enumerate() {
             *reg = c.memory.read_byte(c.registers.i + j as u16);
         }
         c.registers.pc += 2;
@@ -643,4 +643,3 @@ impl OpExecute for Sknp {
         c.registers.pc += 2;
     }
 }
-

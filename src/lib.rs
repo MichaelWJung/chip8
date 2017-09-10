@@ -34,10 +34,3 @@ pub fn run(file: &mut File) {
         cpu.redraw_display();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-    }
-}

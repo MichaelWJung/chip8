@@ -5,7 +5,7 @@ use sdl2::keyboard::Keycode;
 pub struct Keyboard<'a> {
     key_statuses: [bool; 16],
     key_press_pending: bool,
-    event_pump: &'a mut EventPump
+    event_pump: &'a mut EventPump,
 }
 
 const KEY_0: Keycode = Keycode::Comma;
@@ -28,7 +28,11 @@ const KEY_F: Keycode = Keycode::J;
 
 impl<'a> Keyboard<'a> {
     pub fn new(event_pump: &'a mut EventPump) -> Keyboard<'a> {
-        Keyboard { key_statuses: [false; 16], key_press_pending: false, event_pump }
+        Keyboard {
+            key_statuses: [false; 16],
+            key_press_pending: false,
+            event_pump,
+        }
     }
 
     pub fn is_pressed(&mut self, key: u8) -> bool {
@@ -53,9 +57,10 @@ impl<'a> Keyboard<'a> {
     pub fn check_events(&mut self) {
         while let Some(event) = self.event_pump.poll_event() {
             match event {
-                Event::Quit{..} | Event::KeyDown { keycode: Some(Keycode::Escape), ..  } => ::std::process::exit(0),
-                Event::KeyDown { keycode: Some(key), ..  } => self.update_key_status(key, true),
-                Event::KeyUp { keycode: Some(key), ..  } => self.update_key_status(key, false),
+                Event::Quit { .. } |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => ::std::process::exit(0),
+                Event::KeyDown { keycode: Some(key), .. } => self.update_key_status(key, true),
+                Event::KeyUp { keycode: Some(key), .. } => self.update_key_status(key, false),
                 _ => {}
             }
         }

@@ -15,14 +15,18 @@ pub struct DisplayContext {
 impl DisplayContext {
     pub fn new(sdl_context: &Sdl) -> DisplayContext {
         let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem.window("chip8", 10*COLS as u32, 10*ROWS as u32)
+        let window = video_subsystem
+            .window("chip8", 10 * COLS as u32, 10 * ROWS as u32)
             .position_centered()
             .opengl()
             .build()
             .unwrap();
         let canvas = window.into_canvas().build().unwrap();
         let texture_creator = canvas.texture_creator();
-        DisplayContext { canvas, texture_creator }
+        DisplayContext {
+            canvas,
+            texture_creator,
+        }
     }
 }
 
@@ -34,22 +38,30 @@ pub struct Display<'a> {
 
 impl<'a> Display<'a> {
     pub fn new(display_context: &'a mut DisplayContext) -> Display<'a> {
-        let texture = display_context.texture_creator.create_texture_streaming(
-            PixelFormatEnum::RGB24, COLS as u32, ROWS as u32).unwrap();
-        Display { pixels: [false; PIXELS], canvas: &mut display_context.canvas, texture }
+        let texture = display_context
+            .texture_creator
+            .create_texture_streaming(PixelFormatEnum::RGB24, COLS as u32, ROWS as u32)
+            .unwrap();
+        Display {
+            pixels: [false; PIXELS],
+            canvas: &mut display_context.canvas,
+            texture,
+        }
     }
 
     pub fn redraw(&mut self) {
         let pixels = &self.pixels;
-        self.texture.with_lock(None, |buffer: &mut [u8], _: usize| {
-            for (i, &p) in pixels.iter().enumerate() {
-                let offset = i * 3;
-                let val = p as u8 * 255;
-                buffer[offset] = val;
-                buffer[offset + 1] = val;
-                buffer[offset + 2] = val;
-            }
-        }).unwrap();
+        self.texture
+            .with_lock(None, |buffer: &mut [u8], _: usize| {
+                for (i, &p) in pixels.iter().enumerate() {
+                    let offset = i * 3;
+                    let val = p as u8 * 255;
+                    buffer[offset] = val;
+                    buffer[offset + 1] = val;
+                    buffer[offset + 2] = val;
+                }
+            })
+            .unwrap();
         self.canvas.clear();
         self.canvas.copy(&self.texture, None, None).unwrap();
         self.canvas.present();
@@ -83,4 +95,3 @@ impl<'a> Display<'a> {
         was_set
     }
 }
-
