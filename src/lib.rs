@@ -29,7 +29,7 @@ pub fn run(file: &mut File) {
         }
         thread::sleep(time::Duration::from_millis(17));
         cpu.decrement_timers();
-        cpu.display.redraw();
+        cpu.redraw_display();
     }
 }
 

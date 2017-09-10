@@ -6,77 +6,21 @@ use rand;
 use rand::Rng;
 use std::num::Wrapping;
 
-#[derive(Copy, Clone)]
-struct Opcode {
-    code: u16,
-}
-
-impl Opcode {
-    fn new(code: u16) -> Opcode {
-        Opcode { code }
-    }
-
-    fn get_address(&self) -> u16 {
-        self.code & 0xFFF
-    }
-
-    fn get_index_from_nibble(&self, nibble: u8) -> usize {
-        let shift = (nibble - 1) * 4;
-        ((self.code & (0xF << shift)) >> shift) as usize
-    }
-
-    fn get_low_byte(&self) -> u8 {
-        (self.code & 0xFF) as u8
-    }
-}
-
-struct Registers {
-    v: [u8; 16],
-    stack: [u16; 16],
-    i: u16,
-    pc: u16,
-    sp: u8,
-    delay_timer: u8,
-    sound_timer: u8,
-}
-
-impl Registers {
-    fn new() -> Registers {
-        Registers {
-            v: [0; 16],
-            stack: [0; 16],
-            i: 0,
-            pc: 0x200,
-            sp: 0,
-            delay_timer: 0,
-            sound_timer: 0,
-        }
-    }
-}
-
-struct Components<'a, 'b: 'a, 'c: 'a> {
-    registers: &'a mut Registers,
-    memory: &'a mut BlockMemory,
-    display: &'a mut Display<'c>,
-    keyboard: &'a mut Keyboard<'b>,
-    audio_device: &'a mut AudioDevice,
-}
-
-pub struct Cpu<'a, 'b> {
+pub struct Cpu<'a> {
     registers: Registers,
     memory: BlockMemory,
-    pub display: Display<'a>,
-    keyboard: Keyboard<'b>,
+    display: Display<'a>,
+    keyboard: Keyboard<'a>,
     audio_device: AudioDevice,
 }
 
-impl<'a, 'b> Cpu<'a, 'b> {
+impl<'a> Cpu<'a> {
     pub fn new(
         memory: BlockMemory,
         display: Display<'a>,
-        keyboard: Keyboard<'b>,
+        keyboard: Keyboard<'a>,
         audio_device: AudioDevice,
-    ) -> Cpu<'a, 'b> {
+    ) -> Cpu<'a> {
         Cpu {
             registers: Registers::new(),
             memory,
@@ -102,6 +46,10 @@ impl<'a, 'b> Cpu<'a, 'b> {
                 self.audio_device.pause();
             }
         }
+    }
+
+    pub fn redraw_display(&mut self) {
+        self.display.redraw();
     }
 
     fn fetch_opcode(&self) -> Opcode {
@@ -164,6 +112,62 @@ impl<'a, 'b> Cpu<'a, 'b> {
     }
 }
 
+#[derive(Copy, Clone)]
+struct Opcode {
+    code: u16,
+}
+
+impl Opcode {
+    fn new(code: u16) -> Opcode {
+        Opcode { code }
+    }
+
+    fn get_address(&self) -> u16 {
+        self.code & 0xFFF
+    }
+
+    fn get_nibble(&self, nibble: u8) -> u8 {
+        let shift = (nibble - 1) * 4;
+        ((self.code & (0xF << shift)) >> shift) as u8
+    }
+
+    fn get_low_byte(&self) -> u8 {
+        (self.code & 0xFF) as u8
+    }
+}
+
+struct Registers {
+    v: [u8; 16],
+    stack: [u16; 16],
+    i: u16,
+    pc: u16,
+    sp: u8,
+    delay_timer: u8,
+    sound_timer: u8,
+}
+
+impl Registers {
+    fn new() -> Registers {
+        Registers {
+            v: [0; 16],
+            stack: [0; 16],
+            i: 0,
+            pc: 0x200,
+            sp: 0,
+            delay_timer: 0,
+            sound_timer: 0,
+        }
+    }
+}
+
+struct Components<'a, 'b: 'a> {
+    registers: &'a mut Registers,
+    memory: &'a mut BlockMemory,
+    display: &'a mut Display<'b>,
+    keyboard: &'a mut Keyboard<'b>,
+    audio_device: &'a mut AudioDevice,
+}
+
 trait OpConstruct {
     fn new(opcode: Opcode) -> Self;
 }
@@ -206,7 +210,7 @@ macro_rules! create_opcode_struct_x {
 
         impl OpConstruct for $name {
             fn new(opcode: Opcode) -> Self {
-                $name { x: opcode.get_index_from_nibble(3) }
+                $name { x: opcode.get_nibble(3) as usize }
             }
         }
     }
@@ -222,8 +226,8 @@ macro_rules! create_opcode_struct_xy {
         impl OpConstruct for $name {
             fn new(opcode: Opcode) -> Self {
                 $name {
-                    x: opcode.get_index_from_nibble(3),
-                    y: opcode.get_index_from_nibble(2),
+                    x: opcode.get_nibble(3) as usize,
+                    y: opcode.get_nibble(2) as usize,
                 }
             }
         }
@@ -241,9 +245,9 @@ macro_rules! create_opcode_struct_xyn {
         impl OpConstruct for $name {
             fn new(opcode: Opcode) -> Self {
                 $name {
-                    x: opcode.get_index_from_nibble(3),
-                    y: opcode.get_index_from_nibble(2),
-                    n: opcode.get_index_from_nibble(1),
+                    x: opcode.get_nibble(3) as usize,
+                    y: opcode.get_nibble(2) as usize,
+                    n: opcode.get_nibble(1) as usize,
                 }
             }
         }
@@ -260,7 +264,7 @@ macro_rules! create_opcode_struct_xkk {
         impl OpConstruct for $name {
             fn new(opcode: Opcode) -> Self {
                 $name {
-                    x: opcode.get_index_from_nibble(3),
+                    x: opcode.get_nibble(3) as usize,
                     kk: opcode.get_low_byte(),
                 }
             }
